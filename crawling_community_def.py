@@ -163,7 +163,7 @@ def get_board_data(dataFrame, bs) :
 
 
 # Get Board article data from Start Page number to End Page number
-def get_tot_board_data(startPage : int, endPage : int) :
+def get_tot_board_data(dataFrame, startPage : int, endPage : int) :
     df_result = pd.DataFrame([])
     
     if startPage < endPage :
@@ -172,7 +172,7 @@ def get_tot_board_data(startPage : int, endPage : int) :
     for i in range(startPage, endPage + 1) :
         page_url = get_board_url_page(submenu_url, i)
 
-        df_page_result=get_board_data(df_board, tbl_data)
+        df_page_result=get_board_data(dataFrame, tbl_data)
         # Result dataframe 과 새로 page 에서 추출한 dataframe 을 합친다
         df_result=pd.concat([df_page_result, df_result], axis=0)
 
@@ -218,9 +218,12 @@ print(df_board.head())
 
 
 
-df_result = get_tot_board_data(1,1)
+df_result = get_tot_board_data(df_board, 1,2)
 print(df_result)
 print(df_result.shape)
+
+# Rename column
+df_result.rename(columns={0: '번호1', 1 : '번호2', 2: '제목', 3 : '글쓴이', 4 : '글쓴이2', 5 : '등록시간', 6:'수정시간', 7:'추천-비추천1', 8:'추천-비추천2', 9:'조회1', 10:'조회2'}, inplace=True)
 
 # export csv file
 df_result.to_csv('crawling.csv', index=False, sep='|')
