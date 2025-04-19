@@ -10,7 +10,7 @@ from selenium.webdriver.chrome.service import Service
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
-from urllib.parse import urlparse, parse_qs, parse_qsl
+from urllib.parse import urlparse, parse_qs, parse_qsl, urlencode, urlunparse
 
 # TODO : define expt-try case
 def get_bs(driver : webdriver.Chrome) :
@@ -25,6 +25,21 @@ def move_url(driver, main_url, sub_url="") :
     print("Move url link : " + tot_url)
     driver.get(tot_url)
     driver.implicitly_wait(3)
+
+    return tot_url
+
+# board page 변경
+def get_board_url_page(url : str, pagenum : int) :
+    url_parse=urlparse(url)
+    qs = dict(parse_qsl(url_parse.query))
+    # parse_qsl의 결과를 dictionary로 캐스팅
+    qs['page'] = str(pagenum)
+    # 수정 작업
+    url_parse = url_parse._replace(query=urlencode(qs))
+    # dictionary로 되어 있는 query string을 urlencode에 넘겨 문자열화하고 replace
+    new_url = urlunparse(url_parse)
+
+    return new_url
 
 
 # 특정 페이지의 bs4 Object 를 가지고 특정 DOM요소를 잡아 링크를 검색하는 기능 define
@@ -81,6 +96,10 @@ def get_article_info(driver, url, href) :
     # 위와 비슷한 로직을 이용하므로 func 을 만들어 리팩토링한다
     move_url(driver, url, href)
 
+    if '404' in driver.title :
+        driver.back()
+        move_url(driver, site_url, href)
+
     # function 정의하여 반복을 피한다(var html 과 동일)
     data = get_board_container_info(driver)
 
@@ -103,6 +122,45 @@ def get_article_info(driver, url, href) :
     return result
 
 
+# 특정 page (driver 에 의해 접근된) 에 대해 한 html 내의 게시물을 가져오는 함수 정의
+# Parameter : 게시물 dataframe, bs4.tag
+def get_board_data(dataFrame, bs) :
+    df = dataFrame.copy()
+
+    # Class : baseList-title 로 가올 경우 공지, 알림 등을 모두 가져오는 문제 발생
+    bs_href_list = bs.find_all("a",attrs={'class':'baseList-title'})
+    for data in bs_href_list :
+        try :
+            # query string 포함된 href 추출
+            data_href=data['href']
+            print(data_href)
+
+            # href 에서 querystring 추출
+            parser=urlparse(data_href)
+
+            # parse_qs : str 형태의 url parser.query 를 dict 형태로 반환
+            # parse_qsl : tuple 형태로 변환
+            url_board_no = parse_qs(parser.query)['no'][0]
+
+            # 게시물 List 안의 href 로 이동하여 세부 url link 및 acticle text 가져오기
+            zboard_url = "https://ppomppu.co.kr/zboard/"
+            zboard_result = get_article_info(driver, zboard_url, data_href)
+
+            # df_board(sub_board) DataFrame 에 새로운 column 으로 link url 및 article 추가
+
+            df.loc[df_board[0]==url_board_no,'link_url']=zboard_result['url']
+            df.loc[df_board[0]==url_board_no,'article']=zboard_result['article']
+
+            # df col 에 url_link 및 article 추가 완료
+
+        except :
+            # error 발생한 경우 다음 a tag object 읽어서 추출
+            continue
+
+    print(df.shape)
+
+    return df
+
 
 # driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 # driver = webdriver.Chrome(ChromeDriverManager().install())
@@ -124,7 +182,7 @@ menu_data = get_all_board_info(driver, "a", {'class':'menu'})
 print(menu_data[0])
 
 # href 추출하여 sub menu url 을 생성하고 이동
-move_url(driver, site_url, menu_data[0]['href'])
+submenu_url = move_url(driver, site_url, menu_data[0]['href']) 
 
 
 # 단위 sub-main 메뉴 내에서 게시물 리스트 -> 게시물 추출하는 기능 (define)
@@ -141,29 +199,26 @@ df_board['link_url']=np.nan
 df_board['article']=np.nan
 print(df_board.head())
 
-tbl_data_href_list = tbl_data.find_all("a",attrs={'class':'baseList-title'})
-for data in tbl_data_href_list :
-    # query string 포함된 href 추출
-    tbl_data_href=data['href']
-    print(tbl_data_href)
 
-    # href 에서 querystring 추출
-    parser=urlparse(tbl_data_href)
-
-    # parse_qs : str 형태의 url parser.query 를 dict 형태로 반환
-    # parse_qsl : tuple 형태로 변환
-    url_board_no = parse_qs(parser.query)['no'][0]
-
-        
-    # 게시물 List 안의 href 로 이동하여 세부 url link 및 acticle text 가져오기
-    zboard_url = "https://ppomppu.co.kr/zboard/"
-    zboard_result = get_article_info(driver, zboard_url, tbl_data_href)
-
-    # df_board(sub_board) DataFrame 에 새로운 column 으로 link url 및 article 추가
-
-    df_board.loc[df_board[0]==url_board_no[0],'link_url']=zboard_result['url']
-    df_board.loc[df_board[0]==url_board_no[0],'article']=zboard_result['article']
-
-    # df col 에 url_link 및 article 추가 완료
+def get_tot_board_data(startPage : int, endPage : int) :
+    df_result = pd.DataFrame([])
     
-print(df_board)
+    if startPage < endPage :
+        Exception("시작 페이지는 끝 페이지보다 작거나 같아야 합니다.")
+
+    for i in range(startPage, endPage + 1) :
+        page_url = get_board_url_page(submenu_url, i)
+
+        df_page_result=get_board_data(df_board, tbl_data)
+        # Result dataframe 과 새로 page 에서 추출한 dataframe 을 합친다
+        df_result=pd.concat([df_page_result, df_result], axis=0)
+
+    return df_result
+
+df_result = get_tot_board_data(1,1)
+print(df_result)
+print(df_result.shape)
+
+# export csv file
+df_result.to_csv('crawling.csv', index=False, sep='|')
+
