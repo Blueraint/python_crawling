@@ -162,6 +162,23 @@ def get_board_data(dataFrame, bs) :
     return df
 
 
+# Get Board article data from Start Page number to End Page number
+def get_tot_board_data(startPage : int, endPage : int) :
+    df_result = pd.DataFrame([])
+    
+    if startPage < endPage :
+        Exception("시작 페이지는 끝 페이지보다 작거나 같아야 합니다.")
+
+    for i in range(startPage, endPage + 1) :
+        page_url = get_board_url_page(submenu_url, i)
+
+        df_page_result=get_board_data(df_board, tbl_data)
+        # Result dataframe 과 새로 page 에서 추출한 dataframe 을 합친다
+        df_result=pd.concat([df_page_result, df_result], axis=0)
+
+    return df_result
+
+
 # driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()))
 # driver = webdriver.Chrome(ChromeDriverManager().install())
 service = Service()
@@ -200,20 +217,6 @@ df_board['article']=np.nan
 print(df_board.head())
 
 
-def get_tot_board_data(startPage : int, endPage : int) :
-    df_result = pd.DataFrame([])
-    
-    if startPage < endPage :
-        Exception("시작 페이지는 끝 페이지보다 작거나 같아야 합니다.")
-
-    for i in range(startPage, endPage + 1) :
-        page_url = get_board_url_page(submenu_url, i)
-
-        df_page_result=get_board_data(df_board, tbl_data)
-        # Result dataframe 과 새로 page 에서 추출한 dataframe 을 합친다
-        df_result=pd.concat([df_page_result, df_result], axis=0)
-
-    return df_result
 
 df_result = get_tot_board_data(1,1)
 print(df_result)
